@@ -93,21 +93,18 @@ function docurl {
 }
 
 # Preguntar a transmission si ya tiene este episodio.
-# 
-# Existe un pequeño fallo que provoca que algunos episodios no los detecte bien como descargados.
-# Ello no comporta problema alguno, excepto que se descargan las cuatro o cinco páginas hasta llegar al enlace.
-# Deberia arreglarse, aunque no sé muy bien donde está el fallo. Seguro que tiene que ver con el número de episodio.
 function isDownloaded {
 	local serie="$1"
 	local episode="$2"
-	local res=""
-
 
 	echo "Nombre: $serie, Episodio: $episode" >&2
 	serie=`unaccent utf-8 "$serie"`
 
+
+	local pserie=$(prepareSearch "$serie")
 	# Le preguntamos a transmission si ya tiene el archivo
-	res=`transmission-remote $SERVER --list | tr . " " | grep -i "$serie" | grep "$episode"`
+	res=`transmission-remote $SERVER --list | tr . " " | grep -i "$pserie" | grep "$episode"`
+
 	
 	# echo "$res" >&2
 	if [[ ${#res} > 0 ]]; then
@@ -235,6 +232,23 @@ function pausa() {
 	read pau </dev/tty
 }
 
+function prepareSearch() {
+	local serie="$1"
+
+	local s=""
+
+	for (( i=0; i<${#serie}; i++ )); do
+	 	c="${serie:$i:1}"
+	  	if [[ $c == " " ]]; then
+		  	s="$s[_-. ]"
+		else
+			s="$s$c"
+	  	fi
+	done
+	echo "$s"
+}
+
+#Si no existe el directorio /tmp/mt/ lo crea
 if [ ! -d /tmp/mt ]; then
 	mkdir /tmp/mt
 fi
