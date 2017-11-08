@@ -1,7 +1,9 @@
-## ¿Qué es dxtotal?
+## ¿Qué es mt?
 
-Script de bash que sirve para comprobar si hay nuevos capítulos, y descargarlos, de las series que sigues en DivXtotal. Funciona con el cliente de torrents Transmission, mediante el paquete transmission-remote. Si optas por otra solución podrás cambiarlo tú mismo, siempre que el software de tu elección permita cierto acceso mediante la línea de comandos.
+Script de bash que sirve para comprobar si hay nuevos capítulos, y descargarlos, de las series que sigues en MejorTorrent. Funciona con el cliente de torrents Transmission, mediante el paquete transmission-remote. Si optas por otra solución podrás cambiarlo tú mismo, siempre que el software de tu elección permita cierto acceso mediante la línea de comandos.
 
+
+El resto del readme está pendiente de modificar. Este script está basado en dxtotal
 ## Idea tras dxtotal
 
 El caso es que mucha gente sigue series viejas o nuevas por torrent. Prácticamente cada día de la semana miramos a ver si está el siguiente capítulo de nuestro programa favorito en DivXtotal. Aunque sólo mires una vez al día la página, pinchar y añadir los torrents puede ser un trabajo considerable en tiempo. Si lo haces demasiadas veces a la semana, se convierte en una rutina molesta. Y pensé yo, ¿qué me impide escribir un script que haga justamente eso por mi? La respuesta fue: absolutamente nada. Hoy en día hay herramientas de ayer, hoy y siempre; que nos pueden hacer la vida muy fácil. Bash scripting es una de esas cosas. 
