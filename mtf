@@ -1,0 +1,363 @@
+#!/bin/bash
+# Variables de configuración
+# Antes de ejecutar el script debe ajustar estos valores
+SERVER="192.168.0.10:9091 --auth admin:admin"
+DIR=~/bin/scripts/series/titles/
+LOGFILE=~/bin/scripts/mt/log
+WEBADDRESS="www.mejortorrent.com"
+SERIESURI="secciones.php?sec=ultimos_torrents"
+SQLITE="sqlite3 /home/mhyst/bin/scripts/mt/mtdb"
+
+# Variables internas
+# No debe tocarlas excepto quizá la de DEBUG (si es que algún día se implementa :-) 
+VERSION="1.2.1"
+DEBUG=false
+
+# Mensaje de bienvenida
+echo "mt $VERSION - Copyleft (GPL v3) Julio Serrano 2017"
+echo "Revisar nuevas series en MejorTorrent y descargar las indicadas"
+echo "según la misma estructura de clat."
+echo
+
+# Nos movemos al directorio donde residen los archivos que describen las series que seguimos
+cd "$DIR"
+
+#  Funciones del script
+
+# Siempre que se descarga algo nuevo se añade una entrada al log
+# Esto permitiría automatizar con cron (por ejemplo) la ejecución de este script
+log() {
+	local name="$1"
+	echo "`date +"%d/%m/%Y %H:%M"` $name" >> $LOGFILE
+}
+
+# Eliminar espacios exteriores de una cadena
+trim() {
+	local FOO="$1"
+	FOO_NO_EXTERNAL_SPACE="$(echo -e "${FOO}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+	echo "$FOO_NO_EXTERNAL_SPACE"
+}
+
+# Comprueba si la serie que estamos procesando es una de las que seguimos.
+# Si es así, se hace lo necesario para descargarla, si no lo habíamos hecho ya antes.
+function isSeries {
+	local name="$1"
+	local line="$2"
+
+	local res=false
+
+	# Recorremos el directorio de las series mismo de clat
+	for serie in *; do
+		# Si el nombre del archivo coincide con el de una serie
+		if [[ ${name,,} == ${serie,,}* ]]; then
+			echo ">>>Este archivo es de la serie $serie"
+			episode=`echo $name | grep -oE '[0-9]{1,2}x[0-9]{1,3}'`
+
+			res=$(isDownloaded "$serie" "$episode")
+			if $res; then
+				echo "    Ya lo tenemos"
+			else
+				#  local dotname=`echo "$name" | tr " " .`
+				#  res=$(isDownloaded "$dotname")
+				#  if $res; then
+				#  	echo "    Ya lo tenemos"
+				#  else
+					echo "    No lo tenemos"
+					# Llamamos a la funcion que descargará el archivo
+					check "$name" "$line" "$serie" "$episode"
+				# fi
+			fi
+			break
+    	fi
+	done 	
+}
+
+# Invoca a curl de una forma controlada.
+# Este script solo invoca a curl directamente (sin la mediación de esta función)
+# en el paso final de la descarga de un torrent.
+function docurl {
+	local urlfrom="$1"
+	local filename="$2"
+
+	curl "$urlfrom" > "$filename" 2> /dev/null
+	FILESIZE=$(stat -c%s "$filename")
+	while [[ $FILESIZE == 0 ]]; do
+		echo "La descarga ha fallado."
+		echo "Esperando 5 segundos antes de volver a intentarlo..."
+		sleep 5
+		curl "$urlfrom" > "$filename" 2> /dev/null
+		FILESIZE=$(stat -c%s "$filename")
+	done
+
+	removeBinaryCodes "$filename"
+	# pausa "$filename"
+}
+
+# Preguntar a transmission si ya tiene este episodio.
+function isDownloaded {
+	local serie="$1"
+	local episode="$2"
+
+	echo "Nombre: $serie, Episodio: $episode" >&2
+	serie=`unaccent utf-8 "$serie"`
+
+
+	local pserie=$(prepareSearch "$serie")
+	# Le preguntamos a transmission si ya tiene el archivo
+	res=`transmission-remote $SERVER --list | tr . " " | grep -i "$pserie" | grep "$episode"`
+
+	
+	# echo "$res" >&2
+	if [[ ${#res} > 0 ]]; then
+		echo true
+	else
+		# Hacemos la misma comprobación, sustituyendo espacios con puntos
+		#  local name=`echo "$serie" | tr " " .`
+		#  res=`transmission-remote $SERVER --list | grep "$name" | grep "$episode"`
+		#  if [[ ${#res} > 0 ]]; then
+		#  	echo true
+		#  else
+			echo false
+		#  fi
+	fi
+}
+
+# Descargar el episodio
+# Esta función es crucial para que las descargas se realicen correctamente.
+function check {
+	local name="$1"
+	local line="$2"
+	local series="$3"
+	local episode="$4"
+
+	# echo "Depuración..."
+	# echo "$line"
+	# echo "$name"
+	# echo "$series"
+	# echo "Fin depuración"
+
+	echo "Descargando página de $series"
+	# Extraemos la url de la etiqueta href
+	local url=`echo "$line" | grep -Po "href='.*?'" | sed "s/\(href='\|'\)//g"`
+	echo ">>> URL: $url"
+
+	docurl "http://$WEBADDRESS$url" "/tmp/mt/mt3.txt"
+
+	
+	local url2=`grep "descargar-torrent" /tmp/mt/mt3.txt | grep -m 1 "$episode" | grep -Po "href='.*?'"| sed "s/\(href='\|'\)//g"`
+
+	if [[ $url2 == "" ]]; then
+		echo ">>> No se ha podido obtener la URL de la página de descarga del torrent"
+		return
+	fi
+
+	echo ">>> URL de pagina del torrent: $url2"
+
+	docurl "http://$WEBADDRESS/$url2" "/tmp/mt/mt4.txt"
+
+
+	grep "secciones.php?sec=descargas&ap=contar&tabla=series" /tmp/mt/mt4.txt > /tmp/mt/mt5.txt
+
+	local url3=`grep -Po "href='.*?'" /tmp/mt/mt5.txt | sed "s/\(href='\|'\)//g"`
+
+	if [[ $url3 == "" ]]; then
+		echo ">>> No se ha podido obtener la URL de del siguiente paso para el torrent"
+		return
+	fi
+
+	echo ">>> URL del siguiente paso para el torrent: $url3"
+
+	docurl "http://$WEBADDRESS/$url3" "/tmp/mt/mt6.txt"
+
+	
+
+	local url4=`grep "uploads/torrents" /tmp/mt/mt6.txt | grep -Po "href='.*?'" | sed "s/\(href='\|'\)//g"`
+
+	if [[ $url4 == "" ]]; then
+		echo ">>> No se ha podido obtener la URL del torrent"
+		return
+	fi
+
+	echo ">>> URL del torrent: $url4"	
+	
+	echo ">>> Descargando torrent"
+	
+	curl "http://$WEBADDRESS$url4" > "/tmp/mt/torrent.torrent" 2> /dev/null
+
+
+
+	echo ">>> Añadiendo a transmission"
+
+	folder=`cat "$DIR$series"`
+	# Como quitamos "magnet:" de la cadena, después tenemos que aádir magnet:
+	transmission-remote $SERVER --add "/tmp/mt/torrent.torrent" --download-dir "$folder"
+
+	# Registramos la descarga
+	log "$name"
+	# rm /tmp/mt/torrent.torrent
+	# rm /tmp/mt/mt3.txt
+}
+
+# Algunos pasos requieren que el archivo de salida vuelva a ser el de entrada
+# Podía haberse hecho de otra forma, pero está hecho así.
+# Esta función borra el archivo original cuyo contenido ya no necesitamos,
+# y renombra el archivo con el resultado del paso anterior con el nombre de ese
+# archivo original que previamente habíamos quitado de el medio.
+function fixStep() {
+	rm /tmp/mt/mttemp.txt
+	mv /tmp/mt/mttempaux.txt /tmp/mt/mttemp.txt
+}
+
+# Eliminar caracteres no imprimibles de la salida de curl
+# Nó me había pasado con elitetorrent ni con divxtotal, pero esta web lleva una codificación
+# que hace que curl genere caracteres binarios que luego obstaculizan el desempeño de comandos
+# como grep (crucial en este script). Por lo tanto, aquí lo arreglamos fácilmente.
+function removeBinaryCodes() {
+	local filename="$1"
+
+	tr -cd '\11\12\15\40-\176' < $filename > /tmp/mt/fixbin.txt
+	rm "$filename"
+	mv /tmp/mt/fixbin.txt "$filename" 
+}
+
+# Realiza una pausa por medio de pedir al usuario que pulse enter.
+# Esta función solo tiene sentido durante las pruebas y la depuración de errores.
+# Se llama desde docurl después de recibir la salida de este. De esta manera se
+# pausa el script y nos da tiempo a realizar comprobaciones en otro terminal para
+# ver donde está el fallo.
+# Para saber qué archivo tenemos que mirar, la función toma el nombre del archivo
+# como primer argumento y lo muestra al usuario.
+function pausa() {
+	echo "Descargado $1."
+	echo "Pulse intro para continuar..."
+	read pau </dev/tty
+}
+
+function prepareSearch() {
+	local serie="$1"
+
+	local s=""
+
+	for (( i=0; i<${#serie}; i++ )); do
+	 	c="${serie:$i:1}"
+	  	if [[ $c == " " ]]; then
+		  	s="$s[_-. ]"
+		else
+			s="$s$c"
+	  	fi
+	done
+	echo "$s"
+}
+
+function nameExists() {
+	local name="$1"
+
+	local ref=`$SQLITE "select ref from refs where ref = \"$name\""`
+
+	if [[ $ref == "" ]]; then
+		`$SQLITE "insert into refs values(\"$name\")"`
+		echo false
+	else
+		echo true
+	fi
+}
+
+
+#Si no existe el directorio /tmp/mt/ lo crea
+if [ ! -d /tmp/mt ]; then
+	mkdir /tmp/mt
+fi
+
+# Programa principal
+
+# El primer script, el de elitetorrent, permitía realizar búsquedas en la web
+# y en lugar de tomar datos de la URL predetermibada, proporcionarle al script una
+# personalizada. Esto era así porque en elitetorrent no había diferencia entre la página
+# de series, la de búsqueda o la de cualquier serie en concreto. De tal forma que si le dabas
+# la página de una serie, se descargaba los capítulos que te faltaran. 
+# 
+# No era así con divxtotal, por lo que esto siguió aquí como un resto del script original.
+# No se ha quitado por si acaso. Todavía no sé si en MejorTorrent se le va a poder sacar
+# partido a esto. Veremos.
+# 
+# Por defecto establece la URL de ultimos torrents
+if [[ $1 = "" ]]; then
+ 	urlfrom="http://$WEBADDRESS/$SERIESURI/"
+ 	fetchmore=true
+elif [[ $1 == "-u" ]]; then
+ 	urlfrom="$2"
+else
+	urlfrom="http://$WEBADDRESS/secciones.php?sec=buscador&valor=$1 $2 $3 $4 $5 $6 $7 $8 $9"
+fi
+
+echo "Descargando portada de MejorTorrent..."
+echo "$urlfrom"
+echo
+echo "Descargando página de series..."
+
+# Primera interacción con la web.
+# Nos descargamos el índice de últimos torrents.
+
+#docurl "$urlfrom" "/tmp/mt/mttemp.txt"
+
+mv ~/NAS/Download/mtout /tmp/mt/mttemp.txt
+removeBinaryCodes "/tmp/mt/mttemp.txt"
+
+echo "Página de series descargada."
+
+echo
+echo "Procesando..."
+
+# Obtenemos los enlaces con todo lo que contienen, pero solo de las series
+grep -Po '<a.*?</a>' /tmp/mt/mttemp.txt | grep "serie-" > /tmp/mt/mttempaux.txt
+fixStep
+
+
+sort -bd /tmp/mt/mttemp.txt | uniq > /tmp/mt/mttempaux.txt
+fixStep
+
+# En las siguientes dos instrucciones salvamos la entrada estándar en el archivo 10
+# y hacemos que la salida de curl (con el procesamiento de arriba) pase como entrada
+# del script.
+
+#  Link filedescriptor 10 with stdin
+exec 10<&0
+#  stdin replaced with a file supplied as a first argument
+exec < /tmp/mt/mttemp.txt
+
+# En el bucle de abajo se van a recorrer las líneas del archivo de salida de curl.
+# Cada <a href...>...</a> va en una línea. La variable count es para contar las series que hay.
+let count=0
+
+while read line; do
+	# Este primer trim quizá no sea necesario. En la línea siguiente extraemos el contenido
+	# de la etiqueta <a> (es decir, sin el href. De ahí sacaremos el nombre el episodio con
+	# su temporada y número de episodio
+	line=$(trim "$line")
+	name=`grep -Po "'>.*?</a>" <<< $line | sed "s/\('>\|<\/a>\)//g"`
+
+	res=$(nameExists "$name")
+	if $res; then
+		continue;
+	fi
+
+	# Este if también es un resíduo. Quizá se quite más adelante.
+	if [[ $name != "Series" ]]; then
+		# Extraemos el nombre del episodio y el número, claro (Ej. "The Orville 1x07")
+		name="$(echo -e "${name}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    	echo ">$name<"
+    	
+    	((count++))
+    	
+    	# Procesamos la serie. La variable line se necesitará después
+    	# Esta llamada a la función isSeries es la que desencadena todo.
+    	isSeries "$name" "$line"
+    fi
+done
+
+echo Número de series procesadas: $count
+
+# Restauramos la entrada estándar desde donde la teníamos guardada
+exec 0<&10 10<&-
+
+`$SQLITE "delete from refs"`
