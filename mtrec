@@ -1,0 +1,48 @@
+#!/bin/bash
+
+WEBADDRESS="www.mejortorrent.com"
+SERIESURI="secciones.php?sec=ultimos_torrents"
+
+# Invoca a curl de una forma controlada.
+# Este script solo invoca a curl directamente (sin la mediación de esta función)
+# en el paso final de la descarga de un torrent.
+function docurl {
+	local urlfrom="$1"
+	local filename="$2"
+
+	curl "$urlfrom" > "$filename" 2> /dev/null
+	FILESIZE=$(stat -c%s "$filename")
+	while [[ $FILESIZE == 0 ]]; do
+		echo "La descarga ha fallado."
+		echo "Esperando 5 segundos antes de volver a intentarlo..."
+		sleep 5
+		curl "$urlfrom" > "$filename" 2> /dev/null
+		FILESIZE=$(stat -c%s "$filename")
+	done
+
+	removeBinaryCodes "$filename"
+	# pausa "$filename"
+}
+
+# Eliminar caracteres no imprimibles de la salida de curl
+# Nó me había pasado con elitetorrent ni con divxtotal, pero esta web lleva una codificación
+# que hace que curl genere caracteres binarios que luego obstaculizan el desempeño de comandos
+# como grep (crucial en este script). Por lo tanto, aquí lo arreglamos fácilmente.
+function removeBinaryCodes() {
+	local filename="$1"
+
+	tr -cd '\11\12\15\40-\176' < $filename > /tmp/mt/fixbin.txt
+	rm "$filename"
+	mv /tmp/mt/fixbin.txt "$filename" 
+}
+
+#Si no existe el directorio /tmp/mt/ lo crea
+if [ ! -d /tmp/mt ]; then
+	mkdir /tmp/mt
+fi
+
+urlfrom="http://$WEBADDRESS/$SERIESURI/"
+#docurl "$urlfrom" "/tmp/mtout"
+docurl "$urlfrom" /tmp/mt/out
+
+cat /tmp/mt/out >> "/share/HDB_DATA/Download/mtout"
