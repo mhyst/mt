@@ -53,7 +53,23 @@ function isSeries {
 			echo ">>>Este archivo es de la serie $serie"
 			episode=`echo $name | grep -oE '[0-9]{1,2}x[0-9]{1,3}'`
 
-			res=$(isDownloaded "$serie" "$episode")
+			#res=$(isDownloaded "$serie" "$episode")
+			#Ver si ya la tenemos en sintel
+			local idserie=$(sintel --determine-series "$serie")
+
+			if [[ "$idserie" == "" ]]; then
+				#La serie no existe. Creamos la serie
+				idserie=$(sintel -f "series.add:$serie")
+				if [[ "$idserie" == "" ]]; then
+					echo "ERROR: No se pudo insertar la serie en la base de datos"
+					continue;
+				fi
+			fi
+
+			local res=$(sintel --is-downloaded "$idserie $episode")
+			#res=$(isDownloaded "$serie" "$episode")
+
+
 			if $res; then
 				echo "    Ya lo tenemos"
 			else
@@ -191,6 +207,20 @@ function check {
 	folder=`cat "$DIR$series"`
 	# Como quitamos "magnet:" de la cadena, después tenemos que aádir magnet:
 	transmission-remote $SERVER --add "/tmp/mt/torrent.torrent" --download-dir "$folder"
+
+	local torrentid=$(sintel -f torrents.lastId)
+	local ept=$(sintel -f series.parseTemporada:$episode)
+	local epn=$(sintel -f series.parseEpisodioNum:$episode)
+	sintel -f "torrents.info:$torrentid" > /dev/null
+	local location=$(sintel -f torrents.parse:Location)
+	local filename=$(sintel -f torrents.parse:Name)
+	local localpath=$(sintel -f rutas.replace:$location)
+	echo "Location: $location"
+	echo "Filename: $filename"
+	echo "Localpath: $localpath"
+
+	sintel -f "series.addEpisodio:$idserie $ept $epn $localpath$filename $torrentid"
+
 
 	# Registramos la descarga
 	log "$name"
