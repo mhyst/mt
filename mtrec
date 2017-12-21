@@ -20,7 +20,7 @@ function docurl {
 		FILESIZE=$(stat -c%s "$filename")
 	done
 
-	removeBinaryCodes "$filename"
+	#removeBinaryCodes "$filename"
 	# pausa "$filename"
 }
 
