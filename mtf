@@ -80,7 +80,7 @@ function isSeries {
 				#  else
 					echo "    No lo tenemos"
 					# Llamamos a la funcion que descargará el archivo
-					check "$name" "$line" "$serie" "$episode"
+					check "$name" "$line" "$serie" "$episode" "$idserie"
 				# fi
 			fi
 			break
@@ -145,6 +145,7 @@ function check {
 	local line="$2"
 	local series="$3"
 	local episode="$4"
+	local idserie="$5"
 
 	# echo "Depuración..."
 	# echo "$line"
@@ -375,14 +376,14 @@ while read line; do
 	if [[ $name != "Series" ]]; then
 		# Extraemos el nombre del episodio y el número, claro (Ej. "The Orville 1x07")
 		name="$(echo -e "${name}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-    	echo ">$name<"
-    	
-    	((count++))
-    	
-    	# Procesamos la serie. La variable line se necesitará después
-    	# Esta llamada a la función isSeries es la que desencadena todo.
-    	isSeries "$name" "$line"
-    fi
+    		echo ">$name<"
+
+	    	((count++))
+
+    		# Procesamos la serie. La variable line se necesitará después
+    		# Esta llamada a la función isSeries es la que desencadena todo.
+	    	isSeries "$name" "$line"
+	fi
 done
 
 echo Número de series procesadas: $count

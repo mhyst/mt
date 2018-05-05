@@ -1,7 +1,7 @@
 #!/bin/bash
 # Variables de configuración
 # Antes de ejecutar el script debe ajustar estos valores
-SERVER="192.168.0.10:9091 --auth admin:admin"
+SERVER="192.168.0.64:9091 --auth admin:admin"
 DIR=~/bin/scripts/series/titles/
 LOGFILE=~/bin/scripts/mt/log
 WEBADDRESS="www.mejortorrent.com"
@@ -76,12 +76,12 @@ function isSeries {
 				#  else
 					echo "    No lo tenemos"
 					# Llamamos a la funcion que descargará el archivo
-					check "$name" "$line" "$serie" "$episode"
+					check "$name" "$line" "$serie" "$episode" "$idserie"
 				# fi
 			fi
 			break
     	fi
-	done 	
+	done
 }
 
 # Invoca a curl de una forma controlada.
@@ -141,6 +141,7 @@ function check {
 	local line="$2"
 	local series="$3"
 	local episode="$4"
+	local idserie="$5"
 
 	# echo "Depuración..."
 	# echo "$line"
