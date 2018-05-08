@@ -203,7 +203,13 @@ function check {
 
 	folder=`cat "$DIR$series"`
 	# Como quitamos "magnet:" de la cadena, después tenemos que aádir magnet:
-	transmission-remote $SERVER --add "/tmp/mt/torrent.torrent" --download-dir "$folder"
+	res=`transmission-remote $SERVER --add "/tmp/mt/torrent.torrent" --download-dir "$folder"`
+
+	if [[ ${res} != *success* ]]; then
+		echo "ERROR: No se pudo agregar a transmission"
+		echo "Asegurate de que está encendido y funcionando."
+		return;
+	fi
 
 	local torrentid=$(sintel -f torrents.lastId)
 	local ept=$(sintel -f series.parseTemporada:$episode)
