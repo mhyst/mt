@@ -156,7 +156,7 @@ function check {
 
 	docurl "http://$WEBADDRESS$url" "/tmp/mt/mt3.txt"
 
-	
+
 	local url2=`grep "descargar-torrent" /tmp/mt/mt3.txt | grep -m 1 "$episode" | grep -Po "href='.*?'"| sed "s/\(href='\|'\)//g"`
 
 	if [[ $url2 == "" ]]; then
@@ -182,7 +182,7 @@ function check {
 
 	docurl "http://$WEBADDRESS/$url3" "/tmp/mt/mt6.txt"
 
-	
+
 
 	local url4=`grep "uploads/torrents" /tmp/mt/mt6.txt | grep -Po "href='.*?'" | sed "s/\(href='\|'\)//g"`
 
@@ -191,11 +191,16 @@ function check {
 		return
 	fi
 
-	echo ">>> URL del torrent: $url4"	
-	
+	echo ">>> URL del torrent: $url4"
+
 	echo ">>> Descargando torrent"
+
+	if [[ $url4 =~ ^http://.* ]]; then
+		curl -L "$url4" > "/tmp/mt/torrent.torrent" 2> /dev/null
+	else
+		curl "http://$WEBADDRESS$url4" > "/tmp/mt/torrent.torrent" 2> /dev/null
+	fi
 	
-	curl "http://$WEBADDRESS$url4" > "/tmp/mt/torrent.torrent" 2> /dev/null
 
 
 
