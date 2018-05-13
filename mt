@@ -213,9 +213,14 @@ function check {
 	if [[ ${res} != *success* ]]; then
 		echo "ERROR: No se pudo agregar a transmission"
 		echo "Asegurate de que está encendido y funcionando."
-		return;
+		return
+	else
+		echo
+		echo ">>> Añadido correctamente"
+		echo
 	fi
 
+	sintel -f "torrents.setServer:$SERVER"
 	local torrentid=$(sintel -f torrents.lastId)
 	local ept=$(sintel -f series.parseTemporada:$episode)
 	local epn=$(sintel -f series.parseEpisodioNum:$episode)
@@ -223,9 +228,16 @@ function check {
 	local location=$(sintel -f torrents.parse:Location)
 	local filename=$(sintel -f torrents.parse:Name)
 	local localpath=$(sintel -f rutas.replace:$location)
-	echo "Location: $location"
-	echo "Filename: $filename"
-	echo "Localpath: $localpath"
+
+	if [[ "$localpath" == "-1" ]]; then
+		localpath="$location"
+	fi
+	
+	echo "sintel-----------------------------"
+	echo "	Location: $location"
+	echo "	Filename: $filename"
+	echo "	Localpath: $localpath"
+	echo "end sintel--------------------------"
 
 	sintel -f "series.addEpisodio:$idserie $ept $epn $localpath$filename $torrentid"
 
