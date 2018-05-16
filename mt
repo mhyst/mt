@@ -65,6 +65,7 @@ function isSeries {
 			fi
 
 			local res=$(sintel --is-downloaded "$idserie $episode")
+			echo "isDownloaded.res: $res" > /dev/tty
 			#res=$(isDownloaded "$serie" "$episode")
 			if $res; then
 				echo "    Ya lo tenemos"
@@ -220,7 +221,6 @@ function check {
 		echo
 	fi
 
-	sintel -f "torrents.setServer:$SERVER"
 	local torrentid=$(sintel -f torrents.lastId)
 	local ept=$(sintel -f series.parseTemporada:$episode)
 	local epn=$(sintel -f series.parseEpisodioNum:$episode)
@@ -239,7 +239,9 @@ function check {
 	echo "	Localpath: $localpath"
 	echo "end sintel--------------------------"
 
-	sintel -f "series.addEpisodio:$idserie $ept $epn $localpath$filename $torrentid"
+	echo "Antes de addEpisodio"
+	sintel -n "series.addEpisodio:$idserie|$ept|$epn|$localpath/$filename|$torrentid"
+	echo "Después de addEpisodio"
 
 	# Registramos la descarga
 	log "$name"

@@ -224,7 +224,6 @@ function check {
 		echo
 	fi
 
-	sintel -f "torrents.setServer:$SERVER"
 	local torrentid=$(sintel -f torrents.lastId)
 	local ept=$(sintel -f series.parseTemporada:$episode)
 	local epn=$(sintel -f series.parseEpisodioNum:$episode)
@@ -243,7 +242,7 @@ function check {
 	echo "	Localpath: $localpath"
 	echo "end sintel--------------------------"
 
-	sintel -f "series.addEpisodio:$idserie $ept $epn $localpath$filename $torrentid"
+	sintel -n "series.addEpisodio:$idserie|$ept|$epn|$localpath/$filename|$torrentid"
 
 	# Registramos la descarga
 	log "$name"
