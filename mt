@@ -4,7 +4,7 @@
 SERVER="192.168.0.64:9091 --auth admin:admin"
 DIR=~/bin/scripts/series/titles/
 LOGFILE=~/bin/scripts/mt/log
-WEBADDRESS="www.mejortorrent.com"
+WEBADDRESS="www.mejortorrentt.org/"
 SERIESURI="secciones.php?sec=ultimos_torrents"
 
 # Variables internas
@@ -40,49 +40,48 @@ trim() {
 # Comprueba si la serie que estamos procesando es una de las que seguimos.
 # Si es así, se hace lo necesario para descargarla, si no lo habíamos hecho ya antes.
 function isSeries {
-	local name="$1"
-	local line="$2"
+    local name="$1"
+    local line="$2"
 
-	local res=false
+    local res=false
+    local episode=""
 
-	# Recorremos el directorio de las series mismo de clat
-	for serie in *; do
-		# Si el nombre del archivo coincide con el de una serie
-		if [[ ${name,,} == ${serie,,}* ]]; then
-			echo ">>>Este archivo es de la serie $serie"
-			episode=`echo $name | grep -oE '[0-9]{1,2}x[0-9]{1,3}'`
+    # Recorremos el directorio de las series mismo de clat
+    for serie in *; do
+	# Si el nombre del archivo coincide con el de una serie
+	if [[ ${name,,} == ${serie,,}* ]]; then
+	    echo ">>>Este archivo es de la serie $serie"
+	    episode=`echo $name | grep -oE '[0-9]{1,3}x[0-9]{1,3}'`
 
-			#Ver si ya la tenemos en sintel
-			local idserie=$(sintel --determine-series "$serie")
+	    #Ver si ya la tenemos en sintel
+	    local idserie=$(sintel --determine-series "$serie")
 
-			if [[ "$idserie" == "" ]]; then
-				#La serie no existe. Creamos la serie
-				idserie=$(sintel -f "series.add:$serie")
-				if [[ "$idserie" == "" ]]; then
-					echo "ERROR: No se pudo insertar la serie en la base de datos"
-					continue;
-				fi
-			fi
+	    if [[ "$idserie" == "" ]]; then
+		#La serie no existe. Creamos la serie
+		idserie=$(sintel -f "series.add:$serie")
+		if [[ "$idserie" == "" ]]; then
+			echo "ERROR: No se pudo insertar la serie en la base de datos"
+			continue;
+		fi
+	    fi
 
-			local res=$(sintel --is-downloaded "$idserie $episode")
-			echo "isDownloaded.res: $res" > /dev/tty
-			#res=$(isDownloaded "$serie" "$episode")
-			if $res; then
-				echo "    Ya lo tenemos"
-			else
-				#  local dotname=`echo "$name" | tr " " .`
-				#  res=$(isDownloaded "$dotname")
-				#  if $res; then
-				#  	echo "    Ya lo tenemos"
-				#  else
-					echo "    No lo tenemos"
-					# Llamamos a la funcion que descargará el archivo
-					check "$name" "$line" "$serie" "$episode" "$idserie"
-				# fi
-			fi
-			break
-    	fi
-	done
+	    #local res=$(sintel --is-downloaded "$idserie $episode")
+	    declare -a te
+	    IFS='x'
+	    read -ra te <<< "$episode"
+	    unset IFS
+	    local idepisodio=$(sintel -n series.getEpisodioId:"$idserie|${te[0]}|${te[1]}")
+	    # res=$(isDownloaded "$serie" "$episode")
+	    if [[ $idepisodio != "" ]]; then
+		echo "    Ya lo tenemos"
+	    else
+		echo "    No lo tenemos"
+		# Llamamos a la funcion que descargará el archivo
+		check "$name" "$line" "$serie" "$episode" "$idserie"
+	    fi
+	    break
+	fi
+    done
 }
 
 # Invoca a curl de una forma controlada.
@@ -92,6 +91,7 @@ function docurl {
 	local urlfrom="$1"
 	local filename="$2"
 
+	urlfrom=$(sed 's/\&amp;/\&/g' <<< $urlfrom)
 	curl "$urlfrom" > "$filename" 2> /dev/null
 	FILESIZE=$(stat -c%s "$filename")
 	while [[ $FILESIZE == 0 ]]; do
@@ -144,21 +144,22 @@ function check {
 	local episode="$4"
 	local idserie="$5"
 
-	# echo "Depuración..."
-	# echo "$line"
-	# echo "$name"
-	# echo "$series"
-	# echo "Fin depuración"
+	echo "Depuración..."
+	echo "$line"
+	echo "$name"
+	echo "$series"
+	echo "Fin depuración"
 
 	echo "Descargando página de $series"
 	# Extraemos la url de la etiqueta href
+	# echo "Línea: $line" > /dev/tty
 	local url=`echo "$line" | grep -Po "href='.*?'" | sed "s/\(href='\|'\)//g"`
 	echo ">>> URL: $url"
 
 	docurl "http://$WEBADDRESS$url" "/tmp/mt/mt3.txt"
 
 
-	local url2=`grep "descargar-torrent" /tmp/mt/mt3.txt | grep -m 1 "$episode" | grep -Po "href='.*?'"| sed "s/\(href='\|'\)//g"`
+	local url2=`grep "/serie-episodio-descargar" /tmp/mt/mt3.txt | grep -m 1 "$episode" | grep -Po "href='.*?'"| sed "s/\(href='\|'\)//g"`
 
 	if [[ $url2 == "" ]]; then
 		echo ">>> No se ha podido obtener la URL de la página de descarga del torrent"
@@ -169,11 +170,9 @@ function check {
 
 	docurl "http://$WEBADDRESS/$url2" "/tmp/mt/mt4.txt"
 
-
 	grep "secciones.php?sec=descargas&ap=contar&tabla=series" /tmp/mt/mt4.txt > /tmp/mt/mt5.txt
 
 	local url3=`grep -Po "href='.*?'" /tmp/mt/mt5.txt | sed "s/\(href='\|'\)//g"`
-
 	if [[ $url3 == "" ]]; then
 		echo ">>> No se ha podido obtener la URL de del siguiente paso para el torrent"
 		return
@@ -181,11 +180,12 @@ function check {
 
 	echo ">>> URL del siguiente paso para el torrent: $url3"
 
-	docurl "http://$WEBADDRESS/$url3" "/tmp/mt/mt6.txt"
+	docurl "http://$WEBADDRESS$url3" "/tmp/mt/mt6.txt"
 
 
 
-	local url4=`grep "uploads/torrents" /tmp/mt/mt6.txt | grep -Po "href='.*?'" | sed "s/\(href='\|'\)//g"`
+	# local url4=`grep "uploads/torrents" /tmp/mt/mt6.txt | grep -Po "href='.*?'" | sed "s/\(href='\|'\)//g"`
+	local url4=`grep "/uploads/nodo/torrent" /tmp/mt/mt6.txt | grep -Po "{table: 'series', name: '.*?'}"`
 
 	if [[ $url4 == "" ]]; then
 		echo ">>> No se ha podido obtener la URL del torrent"
@@ -196,11 +196,14 @@ function check {
 
 	echo ">>> Descargando torrent"
 
-	if [[ $url4 =~ ^http://.* ]]; then
-		curl -L "$url4" > "/tmp/mt/torrent.torrent" 2> /dev/null
-	else
-		curl "http://$WEBADDRESS$url4" > "/tmp/mt/torrent.torrent" 2> /dev/null
-	fi
+	local jpattern="name:"
+	local jname=$(echo $url4 | grep -o "$jpattern.*")
+	jname="${jname:7: -2}"
+	# echo "jname: $jname" > /dev/tty
+	local url5=`curl -i -X POST -F "table=series" -F "name=$jname" http://www.mejortorrentt.org/uploads/nodo/torrent | grep Location`
+	url5="http${url5:15}"
+	echo "url5: $url5" > /dev/tty
+	curl "$(trim "$url5")" > /tmp/mt/torrent.torrent
 	
 
 
@@ -208,7 +211,7 @@ function check {
 	echo ">>> Añadiendo a transmission"
 
 	folder=`cat "$DIR$series"`
-	# Como quitamos "magnet:" de la cadena, después tenemos que aádir magnet:
+	echo "Directorio: $folder"
 	res=`transmission-remote $SERVER --add "/tmp/mt/torrent.torrent" --download-dir "$folder"`
 
 	if [[ ${res} != *success* ]]; then
@@ -224,7 +227,7 @@ function check {
 	local torrentid=$(sintel -f torrents.lastId)
 	local ept=$(sintel -f series.parseTemporada:$episode)
 	local epn=$(sintel -f series.parseEpisodioNum:$episode)
-	sintel -f "torrents.info:$torrentid" > /dev/null
+	sintel -f "torrents.torrent_info:$torrentid" > /dev/null
 	local location=$(sintel -f torrents.parse:Location)
 	local filename=$(sintel -f torrents.parse:Name)
 	local localpath=$(sintel -f rutas.replace:$location)
@@ -239,9 +242,13 @@ function check {
 	echo "	Localpath: $localpath"
 	echo "end sintel--------------------------"
 
-	echo "Antes de addEpisodio"
-	sintel -n "series.addEpisodio:$idserie|$ept|$epn|$localpath/$filename|$torrentid"
-	echo "Después de addEpisodio"
+	#echo "Antes de addEpisodio"
+	echo "idserie: $idserie"
+	echo "temporada: $ept episodio: $epn"
+	echo "ruta: $folder$filename"
+	echo "torrent: $torrentid"
+	sintel -n "series.addEpisodio:$idserie|$ept|$epn|$folder$filename|-1"
+	#echo "Después de addEpisodio"
 
 	# Registramos la descarga
 	log "$name"
@@ -342,7 +349,7 @@ echo
 echo "Procesando..."
 
 # Obtenemos los enlaces con todo lo que contienen, pero solo de las series
-grep -Po '<a.*?</a>' /tmp/mt/mttemp.txt | grep "serie-" > /tmp/mt/mttempaux.txt
+grep -Po '<a.*?</a>' /tmp/mt/mttemp.txt | grep "series_" > /tmp/mt/mttempaux.txt
 fixStep
 
 
@@ -360,23 +367,23 @@ exec < /tmp/mt/mttemp.txt
 let count=0
 
 while read line; do
-	# Este primer trim quizá no sea necesario. En la línea siguiente extraemos el contenido
-	# de la etiqueta <a> (es decir, sin el href. De ahí sacaremos el nombre el episodio con
-	# su temporada y número de episodio
-	line=$(trim "$line")
-	name=`grep -Po "'>.*?</a>" <<< $line | sed "s/\('>\|<\/a>\)//g"`
+    # Este primer trim quizá no sea necesario. En la línea siguiente extraemos el contenido
+    # de la etiqueta <a> (es decir, sin el href. De ahí sacaremos el nombre el episodio con
+    # su temporada y número de episodio
+    line=$(trim "$line")
+    name=`grep -Po "'>.*?</a>" <<< $line | sed "s/\('>\|<\/a>\)//g"`
 
-	# Este if también es un resíduo. Quizá se quite más adelante.
-	if [[ $name != "Series" ]]; then
-		# Extraemos el nombre del episodio y el número, claro (Ej. "The Orville 1x07")
-		name="$(echo -e "${name}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-    	echo ">$name<"
-    	
-    	((count++))
-    	
-    	# Procesamos la serie. La variable line se necesitará después
-    	# Esta llamada a la función isSeries es la que desencadena todo.
-    	isSeries "$name" "$line"
+    # Este if también es un resíduo. Quizá se quite más adelante.
+    if [[ $name != "Series" ]]; then
+	# Extraemos el nombre del episodio y el número, claro (Ej. "The Orville 1x07")
+	name="$(echo -e "${name}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+	echo ">$name<"
+	
+	((count++))
+	
+	# Procesamos la serie. La variable line se necesitará después
+	# Esta llamada a la función isSeries es la que desencadena todo.
+	isSeries "$name" "$line"
     fi
 done
 

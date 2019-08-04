@@ -1,6 +1,6 @@
 #!/bin/bash
 
-WEBADDRESS="www.mejortorrent.com"
+WEBADDRESS="www.mejortorrentt.org"
 SERIESURI="secciones.php?sec=ultimos_torrents"
 
 # Invoca a curl de una forma controlada.

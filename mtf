@@ -1,10 +1,10 @@
 #!/bin/bash
 # Variables de configuración
 # Antes de ejecutar el script debe ajustar estos valores
-SERVER="192.168.0.10:9091 --auth admin:admin"
+SERVER="192.168.0.64:9091 --auth admin:admin"
 DIR=~/bin/scripts/series/titles/
 LOGFILE=~/bin/scripts/mt/log
-WEBADDRESS="www.mejortorrent.com"
+WEBADDRESS="www.mejortorrentt.org/"
 SERIESURI="secciones.php?sec=ultimos_torrents"
 SQLITE="sqlite3 /home/mhyst/bin/scripts/mt/mtdb"
 
@@ -66,11 +66,14 @@ function isSeries {
 				fi
 			fi
 
-			local res=$(sintel --is-downloaded "$idserie $episode")
-			#res=$(isDownloaded "$serie" "$episode")
-
-
-			if $res; then
+			 # local res=$(sintel --is-downloaded "$idserie $episode")
+		    declare -a te
+		    IFS='|'
+		    read -ra te <<< "$episode"
+		    local idepisodio=$(sintel -n series.getEpisodioId:"$idserie|${te[0]}|${te[1]}")
+		    echo "isDownloaded.res: $res" > /dev/tty
+		    #res=$(isDownloaded "$serie" "$episode")
+		    if [[ $idepisodio != "" ]]; then
 				echo "    Ya lo tenemos"
 			else
 				#  local dotname=`echo "$name" | tr " " .`
@@ -95,6 +98,7 @@ function docurl {
 	local urlfrom="$1"
 	local filename="$2"
 
+	urlfrom=$(sed 's/\&amp;/\&/g' <<< $urlfrom)
 	curl "$urlfrom" > "$filename" 2> /dev/null
 	FILESIZE=$(stat -c%s "$filename")
 	while [[ $FILESIZE == 0 ]]; do
@@ -161,7 +165,7 @@ function check {
 	docurl "http://$WEBADDRESS$url" "/tmp/mt/mt3.txt"
 
 
-	local url2=`grep "descargar-torrent" /tmp/mt/mt3.txt | grep -m 1 "$episode" | grep -Po "href='.*?'"| sed "s/\(href='\|'\)//g"`
+	local url2=`grep "/serie-episodio-descargar" /tmp/mt/mt3.txt | grep -m 1 "$episode" | grep -Po "href='.*?'"| sed "s/\(href='\|'\)//g"`
 
 	if [[ $url2 == "" ]]; then
 		echo ">>> No se ha podido obtener la URL de la página de descarga del torrent"
@@ -188,7 +192,8 @@ function check {
 
 
 
-	local url4=`grep "uploads/torrents" /tmp/mt/mt6.txt | grep -Po "href='.*?'" | sed "s/\(href='\|'\)//g"`
+	# local url4=`grep "uploads/torrents" /tmp/mt/mt6.txt | grep -Po "href='.*?'" | sed "s/\(href='\|'\)//g"`
+	local url4=`grep "/uploads/nodo/torrent" /tmp/mt/mt6.txt | grep -Po "{table: 'series', name: '.*?'}"`
 
 	if [[ $url4 == "" ]]; then
 		echo ">>> No se ha podido obtener la URL del torrent"
@@ -199,11 +204,14 @@ function check {
 
 	echo ">>> Descargando torrent"
 
-	if [[ $url4 =~ ^http://.* ]]; then
-		curl -L "$url4" > "/tmp/mt/torrent.torrent" 2> /dev/null
-	else
-		curl "http://$WEBADDRESS$url4" > "/tmp/mt/torrent.torrent" 2> /dev/null
-	fi
+	local jpattern="name:"
+	local jname=$(echo $url4 | grep -o "$jpattern.*")
+	jname="${jname:7: -2}"
+	# echo "jname: $jname" > /dev/tty
+	local url5=`curl -i -X POST -F "table=series" -F "name=$jname" http://www.mejortorrentt.org/uploads/nodo/torrent | grep Location`
+	url5="http${url5:15}"
+	echo "url5: $url5" > /dev/tty
+	curl "$(trim "$url5")" > /tmp/mt/torrent.torrent
 	
 
 
@@ -227,7 +235,7 @@ function check {
 	local torrentid=$(sintel -f torrents.lastId)
 	local ept=$(sintel -f series.parseTemporada:$episode)
 	local epn=$(sintel -f series.parseEpisodioNum:$episode)
-	sintel -f "torrents.info:$torrentid" > /dev/null
+	sintel -f "torrents.torrent_info:$torrentid" > /dev/null
 	local location=$(sintel -f torrents.parse:Location)
 	local filename=$(sintel -f torrents.parse:Name)
 	local localpath=$(sintel -f rutas.replace:$location)
@@ -352,7 +360,28 @@ echo "Descargando página de series..."
 
 #docurl "$urlfrom" "/tmp/mt/mttemp.txt"
 
-mv ~/NAS/Download/mtout /tmp/mt/mttemp.txt
+
+
+if [ ! -f ~/NAS/Download/mtout ]; then
+	echo "No hay series nuevas disponibles en este momento (0)"
+	exit 0
+fi
+
+rm /tmp/mt/mttemp.txt 2> /dev/null
+mv ~/NAS/Download/mtout /tmp/mt/mttemp.txt 2> /dev/null
+
+
+if [ -f /tmp/mt/mttemp.txt ]; then
+	filetam=$(stat -c%s /tmp/mt/mttemp.txt)
+	if [[ $filetam == 0 ]]; then
+		echo "No hay series nuevas disponibles en este momento (1)"
+		exit 0
+	fi
+else
+	echo "No hay series nuevas disponibles en este momento (2)"
+	exit 0
+fi
+
 removeBinaryCodes "/tmp/mt/mttemp.txt"
 
 echo "Página de series descargada."
@@ -361,7 +390,7 @@ echo
 echo "Procesando..."
 
 # Obtenemos los enlaces con todo lo que contienen, pero solo de las series
-grep -Po '<a.*?</a>' /tmp/mt/mttemp.txt | grep "serie-" > /tmp/mt/mttempaux.txt
+grep -Po '<a.*?</a>' /tmp/mt/mttemp.txt | grep "series_" > /tmp/mt/mttempaux.txt
 fixStep
 
 
